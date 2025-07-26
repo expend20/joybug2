@@ -1,5 +1,5 @@
 use crate::protocol::{DebuggerRequest, DebuggerResponse};
-use crate::interfaces::PlatformAPI;
+use crate::interfaces::{PlatformAPI, Stepper};
 use tokio::net::TcpListener;
 use tracing::{info, error, debug};
 use std::io::{Read, Write};
@@ -60,6 +60,12 @@ fn handle_connection(mut stream: std::net::TcpStream, platform: Arc<Mutex<Platfo
                         Err(e) => DebuggerResponse::Error { message: e.to_string() },
                     }
                 }
+                Ok(DebuggerRequest::SetSingleShotBreakpoint { pid, addr }) => {
+                    match platform.set_single_shot_breakpoint(pid, addr) {
+                        Ok(_) => DebuggerResponse::Ack,
+                        Err(e) => DebuggerResponse::Error { message: e.to_string() },
+                    }
+                }
                 Ok(DebuggerRequest::Launch { command }) => {
                     match platform.launch(&command) {
                         Ok(Some(event)) => DebuggerResponse::Event { event },
@@ -79,9 +85,21 @@ fn handle_connection(mut stream: std::net::TcpStream, platform: Arc<Mutex<Platfo
                         Err(e) => DebuggerResponse::Error { message: e.to_string() },
                     }
                 }
+                Ok(DebuggerRequest::ReadWideString { pid, address, max_len }) => {
+                    match platform.read_wide_string(pid, address, max_len) {
+                        Ok(data) => DebuggerResponse::WideStringData { data },
+                        Err(e) => DebuggerResponse::Error { message: e.to_string() },
+                    }
+                }
                 Ok(DebuggerRequest::GetThreadContext { pid, tid }) => {
                     match platform.get_thread_context(pid, tid) {
                         Ok(context) => DebuggerResponse::ThreadContext { context },
+                        Err(e) => DebuggerResponse::Error { message: e.to_string() },
+                    }
+                }
+                Ok(DebuggerRequest::GetFunctionArguments { pid, tid, count }) => {
+                    match platform.get_function_arguments(pid, tid, count) {
+                        Ok(arguments) => DebuggerResponse::FunctionArguments { arguments },
                         Err(e) => DebuggerResponse::Error { message: e.to_string() },
                     }
                 }
@@ -154,6 +172,20 @@ fn handle_connection(mut stream: std::net::TcpStream, platform: Arc<Mutex<Platfo
                         Err(e) => DebuggerResponse::Error { message: e.to_string() },
                     }
                 }
+                Ok(DebuggerRequest::Step { pid, tid, kind }) => {
+                    // First, set up the stepping state
+                    match platform.step(pid, tid, kind) {
+                        Ok(_) => {
+                            // Stepping state is set up, now continue execution and wait for any event
+                            match platform.continue_exec(pid, tid) {
+                                Ok(Some(event)) => DebuggerResponse::Event { event },
+                                Ok(None) => DebuggerResponse::Ack,
+                                Err(e) => DebuggerResponse::Error { message: e.to_string() },
+                            }
+                        }
+                        Err(e) => DebuggerResponse::Error { message: e.to_string() },
+                    }
+                }
                 Err(e) => DebuggerResponse::Error { message: format!("Invalid request: {}", e) },
             }
         };
@@ -167,6 +199,7 @@ fn handle_connection(mut stream: std::net::TcpStream, platform: Arc<Mutex<Platfo
                 use crate::interfaces::InstructionFormatter;
                 format!("Instructions {{\n{}}}", instructions.format_disassembly())
             },
+            DebuggerResponse::WideStringData { data } => format!("WideStringData {{ data: \"{}\" }}", data),
             DebuggerResponse::SymbolList { symbols } => format!("SymbolList {{ symbols: [..{} symbols] }}", symbols.len()),
             DebuggerResponse::ResolvedSymbolList { symbols } => format!("ResolvedSymbolList {{ symbols: [..{} symbols] }}", symbols.len()),
             _ => format!("{:?}", resp),

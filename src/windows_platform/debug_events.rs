@@ -1,14 +1,14 @@
-use super::{utils, WindowsPlatform};
+use super::{utils, WindowsPlatform, stepper};
 use crate::interfaces::PlatformError;
-use crate::protocol::{ModuleInfo};
+use crate::protocol::ModuleInfo;
 use tracing::{error, trace, warn};
-use windows_sys::Win32::Foundation::{CloseHandle, GetLastError, FALSE, DBG_CONTINUE, DUPLICATE_SAME_ACCESS, HANDLE, DuplicateHandle};
+use windows_sys::Win32::Foundation::{CloseHandle, GetLastError, FALSE, DBG_CONTINUE, DUPLICATE_SAME_ACCESS, HANDLE, DuplicateHandle, STATUS_SINGLE_STEP};
 use windows_sys::Win32::System::Threading::{GetCurrentProcess, INFINITE};
 use windows_sys::Win32::System::Diagnostics::Debug::{
     ContinueDebugEvent, WaitForDebugEvent, DEBUG_EVENT, EXCEPTION_DEBUG_EVENT,
     CREATE_PROCESS_DEBUG_EVENT, EXIT_PROCESS_DEBUG_EVENT, CREATE_THREAD_DEBUG_EVENT,
     EXIT_THREAD_DEBUG_EVENT, LOAD_DLL_DEBUG_EVENT, UNLOAD_DLL_DEBUG_EVENT,
-    OUTPUT_DEBUG_STRING_EVENT, RIP_EVENT, SymLoadModule64, SymUnloadModule64,
+    OUTPUT_DEBUG_STRING_EVENT, RIP_EVENT, SymLoadModule64, SymUnloadModule64
 };
 use std::ffi::CString;
 use std::ptr;
@@ -23,9 +23,6 @@ pub(super) fn handle_create_process_event(
 
     let image_file_name =
         utils::get_path_from_handle(info.hFile).unwrap_or_else(|| image_path_fallback.unwrap_or("<unknown>").to_string());
-    unsafe {
-        CloseHandle(info.hFile);
-    }
 
     // Get the process for this PID to use its handle and clear its managers
     let process = platform.get_process_mut(pid)?;
@@ -142,12 +139,93 @@ pub(super) fn continue_exec(
             let ex_info = unsafe { debug_event.u.Exception };
             let ex_record = ex_info.ExceptionRecord;
             if ex_record.ExceptionCode == windows_sys::Win32::Foundation::EXCEPTION_BREAKPOINT {
-                trace!(pid = debug_event.dwProcessId, tid = debug_event.dwThreadId, address = %format!("0x{:X}", ex_record.ExceptionAddress as u64), "Breakpoint event");
-                Some(crate::protocol::DebugEvent::Breakpoint {
-                    pid: debug_event.dwProcessId,
-                    tid: debug_event.dwThreadId,
-                    address: ex_record.ExceptionAddress as u64,
-                })
+                let address = ex_record.ExceptionAddress as u64;
+                trace!(pid = debug_event.dwProcessId, tid = debug_event.dwThreadId, address = %format!("0x{:X}", address), "Breakpoint event");
+
+                let process = platform.get_process_mut(debug_event.dwProcessId)?;
+
+                // Check if this is a single-shot breakpoint
+                if let Some(original_bytes) = process.single_shot_breakpoints.remove(&address) {
+                    trace!(address = %format!("0x{:X}", address), "Single-shot breakpoint hit. Restoring original bytes.");
+
+                    // Restore the original byte
+                    super::memory::write_memory_internal(process.process_handle.0, address, &original_bytes)?;
+
+                    // Set IP back to the original instruction's address
+                    let mut context = match super::thread_context::get_thread_context(platform, debug_event.dwProcessId, debug_event.dwThreadId)? {
+                        crate::protocol::ThreadContext::Win32RawContext(ctx) => ctx,
+                    };
+                    
+                    #[cfg(target_arch = "x86_64")]
+                    {
+                        context.Rip = address;
+                    }
+                    #[cfg(target_arch = "aarch64")]
+                    {
+                        context.Pc = address;
+                    }
+
+                    super::thread_context::set_thread_context(platform, debug_event.dwProcessId, debug_event.dwThreadId, crate::protocol::ThreadContext::Win32RawContext(context.clone()))?;
+
+                    // Emit specific single-shot breakpoint event
+                    Some(crate::protocol::DebugEvent::SingleShotBreakpoint {
+                        pid: debug_event.dwProcessId,
+                        tid: debug_event.dwThreadId,
+                        address: ex_record.ExceptionAddress as u64,
+                    })
+                } else {
+                    // Check if this is the initial breakpoint for this process
+                    // We consider it initial if it's the first breakpoint we've seen for this process
+                    let is_initial_breakpoint = !process.has_hit_initial_breakpoint;
+                    if is_initial_breakpoint {
+                        process.has_hit_initial_breakpoint = true;
+                        Some(crate::protocol::DebugEvent::InitialBreakpoint {
+                            pid: debug_event.dwProcessId,
+                            tid: debug_event.dwThreadId,
+                            address: ex_record.ExceptionAddress as u64,
+                        })
+                    } else {
+                        Some(crate::protocol::DebugEvent::Breakpoint {
+                            pid: debug_event.dwProcessId,
+                            tid: debug_event.dwThreadId,
+                            address: ex_record.ExceptionAddress as u64,
+                        })
+                    }
+                }
+            } else if ex_record.ExceptionCode == STATUS_SINGLE_STEP {
+                trace!(pid = debug_event.dwProcessId, tid = debug_event.dwThreadId, address = %format!("0x{:X}", ex_record.ExceptionAddress as u64), "Single-step event");
+                
+                // Check if this is from an active stepper
+                let step_key = (debug_event.dwProcessId, debug_event.dwThreadId);
+                if let Some(step_state) = platform.active_steppers.remove(&step_key) {
+                    // This is from an active stepping operation
+                    trace!(pid = debug_event.dwProcessId, tid = debug_event.dwThreadId, kind = ?step_state.kind, "Single-step from active stepper");
+                    
+                    if let Err(e) = stepper::clear_single_step_flag_native2(platform, debug_event.dwProcessId, debug_event.dwThreadId) {
+                        error!("Failed to clear single-step flag: {}", e);
+                    }
+                    
+                    // Return a proper StepComplete event
+                    Some(crate::protocol::DebugEvent::StepComplete {
+                        pid: debug_event.dwProcessId,
+                        tid: debug_event.dwThreadId,
+                        kind: step_state.kind,
+                        address: ex_record.ExceptionAddress as u64,
+                    })
+                } else {
+                    // This is an unexpected single-step (not from our stepper)
+                    trace!(pid = debug_event.dwProcessId, tid = debug_event.dwThreadId, "Unexpected single-step event");
+                    
+                    // Return as normal exception
+                    Some(crate::protocol::DebugEvent::Exception {
+                        pid: debug_event.dwProcessId,
+                        tid: debug_event.dwThreadId,
+                        code: ex_record.ExceptionCode as u32,
+                        address: ex_record.ExceptionAddress as u64,
+                        first_chance: ex_info.dwFirstChance == 1,
+                        parameters: vec![],
+                    })
+                }
             } else {
                 let mut params = Vec::new();
                 let num_params = ex_record.NumberParameters as usize;
@@ -342,4 +420,4 @@ pub(super) fn continue_exec(
         }
     };
     Ok(event)
-} 
+}
