@@ -19,7 +19,7 @@ pub fn preflight_guest_exe(path: &Path) -> Result<(), String> {
     let file = std::fs::File::open(path).map_err(|e| {
         format!(
             "guest exe {} cannot be opened: {e}. `guest_bin_dir` must hold the guest executable \
-             named by `guest_exe` (joybug-core.exe, jlua.exe or the Joybug app exe)",
+             named by `guest_exe` (jlua.exe or the Joybug app exe)",
             path.display()
         )
     })?;
@@ -31,7 +31,7 @@ pub fn preflight_guest_exe(path: &Path) -> Result<(), String> {
     let marker = find_marker(&map).ok_or_else(|| {
         format!(
             "{} is not a joybug guest binary (no guest marker found): it provides neither the \
-             debug-server nor the ETW-collector role. Stage joybug-core.exe, jlua.exe or the \
+             debug-server nor the ETW-collector role. Stage jlua.exe or the \
              Joybug app exe from this build",
             path.display()
         )

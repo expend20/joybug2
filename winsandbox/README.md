@@ -73,8 +73,9 @@ cargo run --example simple   # minimal mount -> run -> read -> kill loop
 
 To see **what a process actually does** — real-time, attributed to its process
 tree, with no snapshot-diff noise — the project includes a native-Rust ETW
-tracer (`src/bin/tracer.rs`, using `ferrisetw`) that runs inside the sandbox as
-SYSTEM and captures four kernel providers:
+tracer (`src/tracer.rs`, using `ferrisetw`) — a library module the host binary
+dispatches into, not a binary of its own. It runs inside the sandbox as SYSTEM
+and captures four kernel providers:
 
 | Signal | Provider | Reported |
 |---|---|---|

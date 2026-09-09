@@ -47,7 +47,7 @@ cargo test                               # Run all tests
 cargo test <test_name>                   # Run a specific test
 cargo test -- --nocapture                # Show test output
 RUST_LOG=trace cargo test -- --nocapture # With full tracing
-cargo run                                # Start server on 127.0.0.1:9000
+cargo run -- --listen 127.0.0.1:9000   # Headless debug server (jlua is the only binary)
 ```
 
 **Build requirements:** Rust toolchain, Windows SDK, MSVC compiler, LLVM/Clang (for LIBCLANG_PATH)

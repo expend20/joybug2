@@ -4,9 +4,9 @@
 -- own the VM, so letting it go leaves the VM up. The owning handle's stop is the
 -- one that tears it down.
 --
--- Requires: the `sandbox` feature and Windows 11 24H2 + the "Windows Sandbox"
--- optional feature. Guest binary is joybug-core.exe (path injected as
--- GUEST_EXE_PATH). Gated on JOYBUG_SANDBOX_LIVE at the Rust layer.
+-- Requires: Windows 11 24H2 + the "Windows Sandbox" optional feature. Guest
+-- binary is jlua.exe (path injected as GUEST_EXE_PATH). Gated on
+-- JOYBUG_SANDBOX_LIVE at the Rust layer.
 
 local status = sbx.status()
 if not (status.supported and status.wsb_present) then

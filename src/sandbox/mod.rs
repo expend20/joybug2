@@ -540,7 +540,7 @@ fn verify_collector_ran(out_path: &Path, guest_exe: &str, code: i32) -> Result<(
             return Err(format!(
                 "the guest ETW collector never started: '{guest_exe}' wrote no '{}' (exec exit \
                  code {code}). The guest exe must provide the collector role (--out); stage \
-                 joybug-core.exe, jlua.exe or the Joybug app exe from this build",
+                 jlua.exe or the Joybug app exe from this build",
                 out_path.display()
             ))
         }

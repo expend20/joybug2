@@ -34,7 +34,7 @@ pub struct MountSpec {
 
 /// Everything [`super::provision`] needs. All host paths are explicit and
 /// caller-supplied — core owns no data-directory layout and never embeds the
-/// guest binaries (they *are* a `joybug-core.exe` build artifact; embedding them
+/// guest binaries (they *are* a joybug-core build artifact, `jlua.exe` or the app; embedding them
 /// in core would be circular).
 #[derive(Debug, Clone)]
 pub struct ProvisionConfig {

@@ -8,21 +8,19 @@ default-members = ["."]
 
 [package]
 name = "joybug-core"
-version = "0.1.0"
+# 0.0.0 is a placeholder: the git tag is the only source of truth, and release CI
+# stamps it here (and into Cargo.lock) before building. A local build reporting
+# 0.0.0 from `jlua --version` / `dbg:server_info()` is correct - it isn't a release.
+version = "0.0.0"
 edition = "2024"
 
 [lib]
 name = "joybug_core"
 path = "src/lib.rs"
 
-[[bin]]
-name = "joybug-core"
-path = "src/main.rs"
-
-[[bin]]
-name = "trace"
-path = "src/bin/trace.rs"
-
+# The one CLI. jlua is the REPL/script runner, the headless debug server
+# (`--listen`), and the sandbox guest (`--listen` / `--out` / `--ui`), so there
+# is a single binary to build, ship and stage.
 [[bin]]
 name = "jlua"
 path = "src/bin/jlua.rs"
@@ -76,10 +74,9 @@ unicorn-engine = { git = "https://github.com/expend20/unicorn", branch = "AVX2-p
 hexpatch-keystone = "0.9"
 mlua = { version = "0.10", features = ["lua54", "send", "vendored"] }
 rustyline = "15"
-# Windows Sandbox control (wsb.exe wrapper + ETW tracer driver). Optional and
-# behind the `sandbox` feature so the default lib/`jlua`/app build never pulls
-# `windows 0.61`. `default-features = false` keeps the tracer bin's `ferrisetw`
-# out too.
+# Windows Sandbox control (wsb.exe wrapper + ETW tracer driver). Always compiled
+# in - there is no feature flag; `sbx.status()` reports at runtime whether the
+# host can actually boot a VM.
 winsandbox = { path = "winsandbox" }
 
 [build-dependencies]

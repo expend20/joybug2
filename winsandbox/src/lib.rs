@@ -308,14 +308,18 @@ impl Sandbox {
 
     /// Convert this handle into an RAII guard that stops the sandbox on drop.
     pub fn into_guard(self) -> RunningSandbox {
-        RunningSandbox { sandbox: Some(self), stop_on_drop: true }
+        RunningSandbox { sandbox: self, stopped: false, stop_on_drop: true }
     }
 }
 
 /// RAII wrapper that calls [`Sandbox::stop`] when dropped. Deref to [`Sandbox`]
-/// for all operations.
+/// for all operations — including after [`stop`](RunningSandbox::stop), which
+/// only marks the guard stopped rather than giving the `Sandbox` away, so a
+/// stopped handle still answers `id()` for callers and for drop-time bookkeeping.
 pub struct RunningSandbox {
-    sandbox: Option<Sandbox>,
+    sandbox: Sandbox,
+    /// Set by `stop`, so it is idempotent and `Drop` never stops the VM twice.
+    stopped: bool,
     /// Whether `Drop` runs `wsb stop`. False for a handle adopted from
     /// [`Sandbox::list`] (see [`RunningSandbox::detached`]): the VM belongs to
     /// whoever started it, so only an explicit `stop()` tears it down.
@@ -325,7 +329,7 @@ pub struct RunningSandbox {
 impl std::ops::Deref for RunningSandbox {
     type Target = Sandbox;
     fn deref(&self) -> &Sandbox {
-        self.sandbox.as_ref().expect("sandbox present until drop")
+        &self.sandbox
     }
 }
 
@@ -335,7 +339,7 @@ impl RunningSandbox {
     /// lifetime: dropping the guard leaves the VM up; [`RunningSandbox::stop`]
     /// still stops it explicitly.
     pub fn detached(sandbox: Sandbox) -> RunningSandbox {
-        RunningSandbox { sandbox: Some(sandbox), stop_on_drop: false }
+        RunningSandbox { sandbox, stopped: false, stop_on_drop: false }
     }
 
     /// Whether dropping this guard stops the VM.
@@ -343,11 +347,12 @@ impl RunningSandbox {
         self.stop_on_drop
     }
 
-    /// Stop now, surfacing any error (unlike `drop`). Idempotent: takes the
-    /// inner sandbox, so a later drop (or second call) is a no-op.
+    /// Stop now, surfacing any error (unlike `drop`). Idempotent: a later drop
+    /// (or second call) is a no-op.
     pub fn stop(&mut self) -> Result<()> {
-        if let Some(s) = self.sandbox.take() {
-            s.stop()?;
+        if !self.stopped {
+            self.stopped = true;
+            self.sandbox.stop()?;
         }
         Ok(())
     }
@@ -355,10 +360,8 @@ impl RunningSandbox {
 
 impl Drop for RunningSandbox {
     fn drop(&mut self) {
-        if let Some(s) = self.sandbox.take() {
-            if self.stop_on_drop {
-                let _ = s.stop();
-            }
+        if self.stop_on_drop && !self.stopped {
+            let _ = self.sandbox.stop();
         }
     }
 }

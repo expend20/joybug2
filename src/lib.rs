@@ -42,10 +42,6 @@ pub type PlatformImpl = windows_platform::WindowsPlatform;
 
 pub use interfaces::SymbolConfig;
 
-pub async fn run() -> anyhow::Result<()> {
-    server::run_server().await
-}
-
 pub fn init_tracing() {
     use tracing_subscriber::EnvFilter;
     let filter = EnvFilter::try_from_default_env()

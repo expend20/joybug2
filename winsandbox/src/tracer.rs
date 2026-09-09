@@ -4,8 +4,8 @@
 //!
 //! This is a *library* module, not a binary. It runs inside a Windows Sandbox as
 //! SYSTEM, and on the host (elevated) for sandbox-less tracing — but in both
-//! cases the process hosting it is a joybug executable (`joybug-core.exe`,
-//! `jlua.exe`, or the Joybug app) that dispatches into [`run`] when it sees the
+//! cases the process hosting it is a joybug executable (`jlua.exe`
+//! or the Joybug app) that dispatches into [`run`] when it sees the
 //! collector's `--out` flag. There is no separate tracer binary to build,
 //! stage, or keep in sync.
 //!

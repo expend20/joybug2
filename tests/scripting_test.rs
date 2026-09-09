@@ -950,7 +950,7 @@ fn test_lua_file_etw_shape() {
     run_lua_test_file_no_server("etw/shape.lua", None);
 }
 
-// --- sandbox (sbx bindings; requires the `sandbox` feature) ---
+// --- sandbox (sbx bindings) ---
 
 // Pure: asserts the `sbx.status()` table shape without booting a VM, so it runs
 // on any machine. Live provision tests would need Win11 24H2 + the feature and
@@ -975,15 +975,15 @@ fn run_lua_sandbox_test(lua_path: &str, test_exe: Option<&str>) {
 }
 
 /// The live sandbox tests need a guest binary that provides both the debug
-/// server and the ETW collector. `joybug-core.exe` is exactly that (RETRO
-/// B3/B4), and Cargo hands its built path to integration tests as
-/// `CARGO_BIN_EXE_joybug-core` — so there is nothing to stage or point an env
-/// var at. `JOYBUG_SANDBOX_TEST_GUEST_EXE` overrides it (e.g. to test jlua.exe
+/// server and the ETW collector. `jlua.exe` is exactly that (RETRO B3/B4), and
+/// Cargo hands its built path to integration tests as `CARGO_BIN_EXE_jlua` — so
+/// there is nothing to stage or point an env var at.
+/// `JOYBUG_SANDBOX_TEST_GUEST_EXE` overrides it (e.g. to test the Joybug app exe
 /// as the guest); the legacy `JOYBUG_SANDBOX_TEST_BINDIR` still works too.
 fn run_lua_sandbox_test_with_guest(lua_path: &str, test_exe: Option<&str>) {
     let lua = lua_without_server(test_exe);
     let guest_exe = std::env::var("JOYBUG_SANDBOX_TEST_GUEST_EXE")
-        .unwrap_or_else(|_| env!("CARGO_BIN_EXE_joybug-core").to_string());
+        .unwrap_or_else(|_| env!("CARGO_BIN_EXE_jlua").to_string());
     lua.globals().set("GUEST_EXE_PATH", guest_exe).unwrap();
     eval_lua_test_file(&lua, lua_path);
 }

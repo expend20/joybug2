@@ -32,8 +32,6 @@ fn print_server_stats() {
 
 use crate::framed_json_stream::FramedJsonStream;
 
-const DEFAULT_LISTEN_ADDR: &str = "127.0.0.1:9000";
-
 fn handle_connection<P>(stream: std::net::TcpStream, platform: Arc<RwLock<P>>)
 where
     P: PlatformAPI + Stepper + Send + Sync + 'static,
@@ -802,39 +800,14 @@ where
     }
 }
 
-pub async fn run_server() -> anyhow::Result<()> {
-    let listener = TcpListener::bind(DEFAULT_LISTEN_ADDR).await?;
-    run_server_with_listener(listener, crate::PlatformImpl::new(), pending()).await
-}
-
 /// Bind `listen` and serve the debug protocol with the default platform until
 /// the process is killed. The one owner of the server bootstrap (bind →
-/// platform with `cfg` → serve forever), shared by core's own `main` and by
-/// hosts that re-launch themselves as an in-guest server (the Joybug UI's guest
-/// mode) — so the CLI and an embedded server can't drift apart.
+/// platform with `cfg` → serve forever), shared by `jlua --listen` and by hosts
+/// that re-launch themselves as an in-guest server (the Joybug UI's guest mode)
+/// — so the CLI and an embedded server can't drift apart.
 pub async fn serve(listen: &str, cfg: crate::SymbolConfig) -> anyhow::Result<()> {
     let listener = TcpListener::bind(listen).await?;
     run_server_with_listener(listener, crate::PlatformImpl::new_with_config(cfg), pending()).await
-}
-
-pub async fn run_server_with_shutdown<F>(shutdown: F) -> anyhow::Result<()>
-where
-    F: Future<Output = ()> + Send,
-{
-    let listener = TcpListener::bind(DEFAULT_LISTEN_ADDR).await?;
-    run_server_with_listener(listener, crate::PlatformImpl::new(), shutdown).await
-}
-
-pub async fn run_server_with_std_listener<F>(
-    listener: StdTcpListener,
-    shutdown: F,
-) -> anyhow::Result<()>
-where
-    F: Future<Output = ()> + Send,
-{
-    listener.set_nonblocking(true)?;
-    let listener = TcpListener::from_std(listener)?;
-    run_server_with_listener(listener, crate::PlatformImpl::new(), shutdown).await
 }
 
 /// Run a server with any PlatformAPI implementation on a pre-bound tokio listener.

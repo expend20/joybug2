@@ -1,19 +1,21 @@
-//! jlua — joybug-core Lua scripting debugger CLI.
+//! jlua — the joybug-core CLI. One binary, every role:
 //!
 //! Usage:
 //!   jlua                              # Interactive REPL
 //!   jlua script.lua                   # Run a script file
 //!   jlua --command "test.exe"         # Launch target, REPL at initial breakpoint
 //!   jlua --command "test.exe" -s script.lua  # Launch + run script
+//!   jlua --listen 127.0.0.1:9000      # Headless debug server (no Lua, no REPL)
 //!   jlua --sandbox --command "C:\path\t.exe" --mount C:\path
 //!                                     # Provision a Windows Sandbox, connect a
 //!                                     # dbg client to the in-guest server, and
 //!                                     # drop into the REPL (or run -s script).
 //!
-//! jlua.exe is also a valid sandbox GUEST: launched with `--listen <addr>` it is
-//! the debug server, with `--out <file>` the ETW collector. `--sandbox`
-//! provisions a VM whose guest exe defaults to *this* jlua.exe, so a single
-//! binary drives and serves the sandbox.
+//! jlua.exe is also a complete sandbox GUEST: launched with `--listen <addr>` it
+//! is the debug server, with `--out <file>` the ETW collector, with `--ui` the
+//! desktop probe (see `joybug_core::guest_roles`). `--sandbox` provisions a VM
+//! whose guest exe defaults to *this* jlua.exe, so a single binary drives and
+//! serves the sandbox.
 
 use std::path::PathBuf;
 use std::process::exit;
@@ -27,7 +29,7 @@ use joybug_core::scripting::repl::Repl;
 use joybug_core::scripting;
 
 #[derive(Parser, Debug)]
-#[command(name = "jlua", about = "joybug-core Lua scripting debugger")]
+#[command(name = "jlua", version, about = "joybug-core Lua scripting debugger")]
 struct Args {
     /// Lua script file to execute
     #[arg(short = 's', long)]
@@ -48,6 +50,13 @@ struct Args {
     /// Disable colored output
     #[arg(long)]
     no_color: bool,
+
+    // The debug-server flags, defined once in the library (`guest_roles`) so the
+    // `--help` text here and the parse a sandbox guest goes through are the same
+    // grammar. `--listen` selects the server role and never returns; the other
+    // two also configure the embedded server behind the REPL/script.
+    #[command(flatten)]
+    server_args: joybug_core::guest_roles::ServerArgs,
 
     // ---- Windows Sandbox mode (see `sandbox_mode`) ----
     /// Provision a Windows Sandbox and connect `dbg` to the in-guest server.
@@ -118,7 +127,7 @@ fn main() {
     let server_addr = if let Some(addr) = &args.server {
         addr.clone()
     } else {
-        let srv = LocalServer::spawn();
+        let srv = local_server(&args);
         let addr = srv.address().to_string();
         _server = srv;
         addr
@@ -159,6 +168,16 @@ fn main() {
     }
 }
 
+/// The embedded server behind a local (non-`--server`) session, honouring
+/// `--symbol-path` / `--offline` so a scripted run resolves symbols the same
+/// way a `--listen` server given the same flags would.
+fn local_server(args: &Args) -> LocalServer {
+    LocalServer::start_with_config(args.server_args.symbol_config()).unwrap_or_else(|e| {
+        eprintln!("Failed to start local debug server: {e}");
+        exit(1);
+    })
+}
+
 /// A Lua state with a `dbg` client connected to `server_addr` and the colour
 /// flag set — the bootstrap shared by the local and `--sandbox` sessions.
 fn session_lua(args: &Args, server_addr: &str) -> mlua::Lua {
@@ -189,7 +208,6 @@ fn session_lua(args: &Args, server_addr: &str) -> mlua::Lua {
 /// globals, and drop into the REPL (or run `-s script`). Provision once, iterate
 /// against the live guest as long as you like — the boot cost is paid a single
 /// time (RETRO F3). On exit the VM is stopped unless `--keep-sandbox`.
-#[cfg(windows)]
 fn sandbox_mode(args: &Args, script: Option<&std::path::Path>) {
     use joybug_core::sandbox;
 
@@ -265,7 +283,7 @@ fn sandbox_mode(args: &Args, script: Option<&std::path::Path>) {
         debug: true,
         collect_etw: !etw.ops.is_empty() || args.stacks,
         etw,
-        symbol_offline: false,
+        symbol_offline: args.server_args.offline,
         // A debug-mode session may leave this empty and drive dbg:launch itself;
         // --command fills it in (rewritten to a guest path via the mounts).
         launch_command: args.command.clone().unwrap_or_default(),
@@ -326,10 +344,4 @@ fn sandbox_mode(args: &Args, script: Option<&std::path::Path>) {
             eprintln!("warning: {e}");
         }
     }
-}
-
-#[cfg(not(windows))]
-fn sandbox_mode(_args: &Args, _script: Option<&std::path::Path>) {
-    eprintln!("--sandbox is only available on Windows");
-    std::process::exit(1);
 }

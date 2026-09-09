@@ -1,0 +1,113 @@
+# Reusable build + test job. Called by ci.yml (every push/PR) and release.yml
+# (tag builds), so CI and releases always run the exact same steps - the only
+# knobs are the cargo profile and whether a version gets stamped in.
+name: Build & Test
+
+on:
+  workflow_call:
+    inputs:
+      version:
+        description: >-
+          Release version, with or without a leading "v". When set, it is stamped
+          into Cargo.toml before the build and the artifacts get a
+          SHA256 sidecar. Artifact names are jlua-<arch>.exe either way -
+          deliberately version-free, so releases/latest/download/jlua-x64.exe is
+          a stable permalink.
+        type: string
+        required: false
+        default: ''
+      release:
+        description: Build and test with --release (what a tag ships).
+        type: boolean
+        required: false
+        default: false
+      retention-days:
+        type: number
+        required: false
+        default: 14
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build-and-test:
+    strategy:
+      # Both arches always report; one failing arch shouldn't mask the other.
+      fail-fast: false
+      matrix:
+        arch: [ARM64, X64]
+    runs-on:
+      - self-hosted
+      - Windows
+      - ${{ matrix.arch }}
+    steps:
+    - uses: actions/checkout@v4
+
+    # The git tag is the only source of truth for the version. Cargo.toml carries
+    # a 0.0.0 placeholder in the repo and is stamped here, before the build reads
+    # it - so `jlua --version` and `dbg:server_info().version` report the real
+    # version without anything needing to be committed at release time.
+    - name: Stamp version from tag
+      if: inputs.version != ''
+      shell: powershell
+      run: |
+        $ErrorActionPreference = "Stop"
+        $v = "${{ inputs.version }}" -replace '^v', ''
+
+        # A targeted replace rather than a TOML round-trip. The pattern is
+        # anchored on the placeholder value, so a dependency's `version = "..."`
+        # (never 0.0.0, never at column 0 in Cargo.toml) can't be hit instead.
+        # Cargo.lock needs no stamping - the build isn't --locked, so cargo
+        # rewrites the workspace member's version there itself.
+        $toml = "Cargo.toml"
+        $text = Get-Content $toml -Raw
+        $stamped = ([regex]'(?m)^version = "0\.0\.0"').Replace($text, ('version = "{0}"' -f $v), 1)
+        if ($stamped -eq $text) { throw "Cargo.toml has no 0.0.0 placeholder to stamp" }
+        [IO.File]::WriteAllText("$PWD/$toml", $stamped)
+
+        # Assert on what cargo itself parses, not on a substring of the file.
+        # `--no-deps` reads only this manifest: no resolve, no registry access.
+        $pkg = (cargo metadata --no-deps --format-version 1 | ConvertFrom-Json).packages | Where-Object name -eq "joybug-core"
+        if ($pkg.version -ne $v) { throw "version stamp failed: cargo reports '$($pkg.version)', wanted '$v'" }
+        Write-Host "stamped version $v"
+
+    # `cargo test` builds the lib, every bin target and the test binaries, so it
+    # produces the jlua.exe that "Stage artifacts" ships - a preceding `cargo
+    # build` would only relink it. One step, same profile a release runs against.
+    - name: Build and test
+      run: cargo test --verbose ${{ inputs.release && '--release' || '' }} -- --nocapture
+
+    - name: Stage artifacts
+      shell: powershell
+      run: |
+        $ErrorActionPreference = "Stop"
+        if ("${{ matrix.arch }}" -eq "X64") { $arch = "x64" } else { $arch = "aarch64" }
+        if ("${{ inputs.release }}" -eq "true") { $profile = "release" } else { $profile = "debug" }
+
+        $src = "target/$profile/jlua.exe"
+        if (-not (Test-Path $src)) { throw "build output not found: $src" }
+
+        Remove-Item -Recurse -Force artifacts -ErrorAction SilentlyContinue
+        New-Item -ItemType Directory -Force artifacts | Out-Null
+
+        # Version-free on purpose: keeps the releases/latest/download/<name>
+        # permalink stable.
+        $name = "jlua-$arch.exe"
+        Copy-Item $src "artifacts/$name"
+
+        # Sidecars only for a tagged release, which is what one-click installs
+        # and `latest/download/<name>.sha256` verify against.
+        if ("${{ inputs.version }}") {
+          # sha256sum-compatible sidecar: lowercase hash, two spaces, LF ending.
+          $hash = (Get-FileHash "artifacts/$name" -Algorithm SHA256).Hash.ToLower()
+          [IO.File]::WriteAllText("$PWD/artifacts/$name.sha256", "$hash  $name`n")
+        }
+        Get-ChildItem artifacts | Format-Table Name, Length
+
+    - name: Upload artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: jlua-${{ matrix.arch }}
+        path: artifacts/*
+        retention-days: ${{ inputs.retention-days }}
+        if-no-files-found: error

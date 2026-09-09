@@ -6,11 +6,40 @@ This is the engine behind **[Joybug](https://github.com/org62/joybug-tauri)**, a
 
 It covers the ground you'd expect from a debugging backend — process launch and attach, breakpoints, stepping, memory read/write, disassembly, symbols, call stacks — plus a handful of less common capabilities that the UI surfaces as first-class features.
 
+The whole engine is also a single command-line tool, **`jlua`**: one portable exe that runs Lua scripts against a live process (`dbg`), analyses and emulates PE files with no process at all (`pe`), detonates a target inside a disposable Windows Sandbox with ETW capture (`sbx`), and traces a process tree on the host (`etw`). It doubles as the headless debug server (`jlua --listen`) and as the sandbox guest.
+
+## Using it with an AI agent
+
+Point the model at this repository and it has what it needs: [`llms.txt`](llms.txt) is the index, and [`docs/agent-guide.md`](docs/agent-guide.md) is the start page — download permalink, how to run jlua non-interactively (a script in, stdout out, no REPL), which surface to pick for a question, and tested recipes for static triage, API tracing, breakpoints, coverage, offline emulation and sandbox detonation. The complete API is [`docs/jlua-guide.md`](docs/jlua-guide.md).
+
+## Download
+
+Grab the latest build from the [Releases page](https://github.com/org62/joybug-core/releases), or use the permalinks:
+
+| Host | Download |
+| --- | --- |
+| x64 | [`jlua-x64.exe`](https://github.com/org62/joybug-core/releases/latest/download/jlua-x64.exe) |
+| ARM64 | [`jlua-aarch64.exe`](https://github.com/org62/joybug-core/releases/latest/download/jlua-aarch64.exe) |
+
+Each has a `.sha256` sidecar next to it. It's a single portable `.exe` — no installer, no runtime, nothing to configure. `jlua --version` prints the release it came from (a local build says `0.0.0`). Download the build that matches **your machine's** architecture — see [Supported targets](#supported-targets).
+
 ## Supported targets
 
 Windows, x64 and ARM64. Breakpoints and single-stepping are written natively, so for a **native 64-bit** target **the host architecture must match** — an ARM64 build won't correctly debug an emulated x64 process, or vice versa. **32-bit x86 (WOW64)** targets are supported on either host, driven through the 32-bit (`WOW64_CONTEXT`) register file.
 
 ## Usage
+
+As a command-line tool — `jlua` is the only binary this crate builds:
+
+```bash
+jlua                                   # interactive Lua REPL
+jlua -s script.lua                     # run a script (see docs/agent-guide.md for the contract)
+jlua --command "target.exe" -s x.lua   # launch a target, then run the script
+jlua --listen 127.0.0.1:9000           # headless debug server for remote clients
+jlua --sandbox --command "C:\mounts\d\target.exe" --mount C:\d   # debug inside Windows Sandbox
+```
+
+`--offline` and `--symbol-path` control symbol resolution for the embedded server and for `--listen` alike. The Lua API is documented in [`docs/jlua-guide.md`](docs/jlua-guide.md).
 
 As a library:
 
@@ -19,9 +48,7 @@ As a library:
 joybug-core = { git = "https://github.com/org62/joybug-core" }
 ```
 
-As a server — `cargo run --bin joybug-core` listens on `127.0.0.1:9000`. Clients speak the protocol in `src/protocol.rs`; `src/protocol_io.rs` has a ready-made client. Embedding the server in-process instead is a one-liner via `local_server::LocalServer`, which is what Joybug does for local sessions.
-
-Two other binaries come along: `trace` and `jlua`, a Lua REPL exposing the debugger API.
+As a server — `jlua --listen 127.0.0.1:9000`. Clients speak the protocol in `src/protocol.rs`; `src/protocol_io.rs` has a ready-made client. Embedding the server in-process instead is a one-liner via `local_server::LocalServer`, which is what Joybug and jlua itself do for local sessions.
 
 ## Sandbox & ETW
 
@@ -48,11 +75,24 @@ The engine links Capstone, Keystone, Unicorn and Lua natively, so the build need
 - On ARM64, Keystone's bundled CMakeLists needs CMake < 4: `pip install cmake==3.31.6`, put it first on `PATH`, and set `CMAKE_GENERATOR=Ninja`.
 - Two dependencies are pulled from GitHub forks rather than crates.io, so the build needs network access.
 
-Integration tests under `tests/` need Windows with debugging privileges. The live Windows Sandbox tests need more: set `JOYBUG_SANDBOX_LIVE=1`, and point `JOYBUG_SANDBOX_TEST_BINDIR` at a folder holding the guest exe. They self-skip when Windows Sandbox isn't available, and are serialized against each other because Windows allows only one sandbox per user.
+Integration tests under `tests/` need Windows with debugging privileges. The live Windows Sandbox tests need more: set `JOYBUG_SANDBOX_LIVE=1`; the freshly built `jlua.exe` is staged as the guest (override with `JOYBUG_SANDBOX_TEST_GUEST_EXE`). They self-skip when Windows Sandbox isn't available, and are serialized against each other because Windows allows only one sandbox per user.
+
+### Releases
+
+Trunk-based: one branch, `main`, and tags. A release is a tag on `main` — nothing else is committed:
+
+```bash
+git tag v0.1.0 && git push origin v0.1.0
+```
+
+`release.yml` runs the same build and tests as CI in `--release`, stamps the tag into `Cargo.toml` (the repo keeps a `0.0.0` placeholder; `jlua --version` on a local build prints that), and publishes `jlua-x64.exe` / `jlua-aarch64.exe` with `.sha256` sidecars. A tag containing `-` (`v0.2.0-rc.1`) is a prerelease, which the `releases/latest/download/...` permalinks skip.
 
 ## Documentation
 
-Notes on specific subsystems live in [`docs/`](docs/) — the Lua scripting API and the trace format.
+- [`docs/agent-guide.md`](docs/agent-guide.md) — start here: getting jlua, running it non-interactively, recipes.
+- [`docs/jlua-guide.md`](docs/jlua-guide.md) — the complete Lua API (`dbg`, `pe`, `sbx`, `etw`).
+- [`docs/TENET_TRACE_FORMAT.md`](docs/TENET_TRACE_FORMAT.md) — the instruction-trace format.
+- [`llms.txt`](llms.txt) — the same links as an index for language models.
 
 ## License
 

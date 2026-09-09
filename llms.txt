@@ -1,0 +1,33 @@
+# joybug-core
+
+> A Windows debugger engine (Rust) with a single portable CLI, `jlua.exe`, that an agent drives
+> with Lua scripts: live debugging (breakpoints, memory, registers, call stacks, coverage,
+> watchpoints, scans), offline PE analysis (imports, strings, disassembly, xrefs, emulation of
+> a routine without a process), detonation in a disposable Windows Sandbox with ETW capture,
+> and host ETW tracing. x64 and ARM64 hosts; x64, ARM64 and 32-bit x86 targets.
+
+Read the agent guide first: it has the download permalinks, the non-interactive contract
+(write a script, run `jlua --no-color -s script.lua`, never the REPL), a table of which
+surface to use, and tested copy-paste recipes. The jlua guide is the complete API reference.
+
+## Docs
+
+- [Agent guide (start here)](https://raw.githubusercontent.com/org62/joybug-core/main/docs/agent-guide.md): download, run non-interactively, recipes, gotchas
+- [jlua guide (full API)](https://raw.githubusercontent.com/org62/joybug-core/main/docs/jlua-guide.md): every `dbg:*`, `pe`, `sbx`, `etw` call
+- [README](https://raw.githubusercontent.com/org62/joybug-core/main/README.md): scope, supported targets, building from source
+- [Tenet trace format](https://raw.githubusercontent.com/org62/joybug-core/main/docs/TENET_TRACE_FORMAT.md): the instruction-trace text jlua emits
+
+## Download
+
+- [jlua-x64.exe](https://github.com/org62/joybug-core/releases/latest/download/jlua-x64.exe): x64 hosts
+- [jlua-aarch64.exe](https://github.com/org62/joybug-core/releases/latest/download/jlua-aarch64.exe): ARM64 hosts
+- [Releases](https://github.com/org62/joybug-core/releases): all versions, `.sha256` sidecars next to each exe
+
+## Examples
+
+- [tests/lua](https://github.com/org62/joybug-core/tree/main/tests/lua): runnable Lua scripts grouped by topic (basics, breakpoints, memory, disassembly, emulation, pe, sandbox, etw), executed in CI
+
+## Optional
+
+- [Protocol](https://raw.githubusercontent.com/org62/joybug-core/main/src/protocol.rs): the framed-JSON wire protocol behind `jlua --listen`, for clients in other languages
+- [Joybug UI](https://github.com/org62/joybug-tauri): the desktop debugger built on this engine

@@ -14,9 +14,9 @@
 -- their access masks, and use the victim's own marker file as ground truth that
 -- the (invisible) cross-process write really happened.
 --
--- Requires: the `sandbox` feature and Windows 11 24H2 + the "Windows Sandbox"
--- optional feature. The guest binary is joybug-core.exe (path injected as
--- GUEST_EXE_PATH). Gated on JOYBUG_SANDBOX_LIVE at the Rust layer.
+-- Requires: Windows 11 24H2 + the "Windows Sandbox" optional feature. The guest
+-- binary is jlua.exe (path injected as GUEST_EXE_PATH). Gated on
+-- JOYBUG_SANDBOX_LIVE at the Rust layer.
 
 local status = sbx.status()
 if not (status.supported and status.wsb_present) then

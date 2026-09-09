@@ -1139,8 +1139,9 @@ statically, so `esp` ends up low by the argument bytes.
 
 ### Windows Sandbox (`sbx`)
 
-> Requires a build with the `sandbox` feature and Windows 11 24H2+ with the
-> "Windows Sandbox" optional feature. Absent, `sbx` is not registered.
+> Always compiled in (there is no feature flag). Booting a VM additionally needs
+> Windows 11 24H2+ with the "Windows Sandbox" optional feature — check with
+> `sbx.status()` before provisioning.
 
 The `sbx` table boots and controls a disposable Windows Sandbox VM **in-process**
 (host-side orchestration — unlike `dbg`, which talks to a debug server). It
@@ -1150,7 +1151,7 @@ in-guest server URL, which you connect a normal `dbg` client to.
 The guest binary is **caller-supplied**: point `guest_bin_dir` at a folder holding
 one executable that provides both the debug server and the ETW collector,
 selected by the flags it is launched with (`--listen` / `--out`). Any joybug
-build is a valid guest — `joybug-core.exe`, `jlua.exe`, or the Joybug app exe;
+build is a valid guest — `jlua.exe` or the Joybug app exe;
 `guest_exe` names it inside the folder and defaults to `joybug.exe` (what the app
 stages). Before booting a VM, `provision` **preflights** the file: it must carry
 this build's guest marker (proving both roles and a matching protocol revision),
@@ -1384,8 +1385,8 @@ formatted as `HH:MM:SS.mmm` UTC.)
 
 ### Host ETW Tracing (`etw`)
 
-> Requires a build with the `etw` feature (implied by `sandbox`). Absent, `etw`
-> is not registered.
+> Always compiled in (there is no feature flag). Kernel ETW on the host needs
+> administrator rights — see the elevation note below.
 
 Where `sbx` runs the collector *inside* a sandbox VM, the `etw` table runs it
 directly on the **host machine** — no VM. Two modes: **attach** to a live process

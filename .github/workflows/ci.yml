@@ -1,4 +1,4 @@
-name: Build
+name: CI
 
 on:
   # joybug-core has a single long-lived branch. Feature branches aren't listed under
@@ -9,14 +9,11 @@ on:
     branches: [ "main" ]
 
 concurrency:
-  group: build-${{ github.workflow }}-${{ github.ref }}
+  group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
-env:
-  CARGO_TERM_COLOR: always
-
 jobs:
-  build_github_actions:
+  build:
     # A PR is built before merge as the merge preview (refs/pull/N/merge). When
     # nothing has landed on main in between - the normal case here - merging
     # produces an identical tree, so the push run would rebuild the same code.
@@ -26,18 +23,4 @@ jobs:
     if: >-
       github.event_name != 'push' ||
       !startsWith(github.event.head_commit.message, 'Merge pull request ')
-    strategy:
-      # Both arches always report; one failing arch shouldn't mask the other.
-      fail-fast: false
-      matrix:
-        arch: [ARM64, X64]
-    runs-on:
-      - self-hosted
-      - Windows
-      - ${{ matrix.arch }}
-    steps:
-    - uses: actions/checkout@v4
-    - name: Build
-      run: cargo build
-    - name: Run tests
-      run: cargo test --verbose -- --nocapture
+    uses: ./.github/workflows/_build.yml

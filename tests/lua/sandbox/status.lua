@@ -1,7 +1,6 @@
 -- Test: sbx.status() shape (pure, no VM booted)
--- Requires: the `sandbox` feature. Runs on any machine — asserts the shape and
--- types of the availability table, not whether Windows Sandbox is actually
--- available (so it passes on hosts without the feature).
+-- Runs on any machine — asserts the shape and types of the availability table,
+-- not whether Windows Sandbox is actually available.
 
 assert(type(sbx) == "table", "sbx global should be a table")
 assert(type(sbx.provision) == "function", "sbx.provision should be a function")

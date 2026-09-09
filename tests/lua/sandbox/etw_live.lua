@@ -5,11 +5,11 @@
 -- then enumerates the recorded events with `sbx.events`. This is the combination
 -- the app performs, driven entirely through the `sbx`/`etw` Lua API.
 --
--- Requires: the `sandbox` feature and Windows 11 24H2 + the "Windows Sandbox"
--- optional feature. The guest binary is joybug-core.exe itself (the harness
--- injects its path as GUEST_EXE_PATH). Gated on JOYBUG_SANDBOX_LIVE at the Rust
--- layer so a plain `cargo test` never boots a VM; here we also self-skip when
--- the sandbox isn't actually available so the test is safe to run anywhere.
+-- Requires: Windows 11 24H2 + the "Windows Sandbox" optional feature. The guest
+-- binary is jlua.exe itself (the harness injects its path as GUEST_EXE_PATH).
+-- Gated on JOYBUG_SANDBOX_LIVE at the Rust layer so a plain `cargo test` never
+-- boots a VM; here we also self-skip when the sandbox isn't actually available so
+-- the test is safe to run anywhere.
 
 local status = sbx.status()
 if not (status.supported and status.wsb_present) then

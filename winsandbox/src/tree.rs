@@ -8,7 +8,7 @@
 //! must be tracked even when process events aren't being emitted, because it is
 //! what attributes the child's *file* and *registry* events to the run.
 //!
-//! Lives in the lib (not in `bin/tracer.rs`) so it can be unit-tested without
+//! Lives in `tree.rs` rather than in `tracer.rs` so it can be unit-tested without
 //! `ferrisetw`, ETW privileges, or a sandbox.
 
 use std::collections::HashSet;

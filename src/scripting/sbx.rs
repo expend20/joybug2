@@ -201,7 +201,7 @@ fn provision_config_from(opts: &LuaTable) -> mlua::Result<ProvisionConfig> {
     let guest_bin_dir = PathBuf::from(req_str(opts, "guest_bin_dir")?);
     // One exe provides both the debug server and the ETW collector; the default
     // matches what the Joybug app stages. A script pointing at its own build
-    // (joybug-core.exe, jlua.exe) overrides it. `provision` verifies the file
+    // (jlua.exe) overrides it. `provision` verifies the file
     // carries this build's guest marker before booting anything.
     let guest_exe = opts
         .get::<Option<String>>("guest_exe")?

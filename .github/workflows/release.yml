@@ -1,0 +1,50 @@
+# Releases are cut by tagging a commit on `main`:
+#
+#   git tag v0.1.0 && git push origin v0.1.0
+#
+# That's the whole procedure - the tag is the only source of truth for the
+# version. It runs the same build + tests as CI, in --release and with the
+# version stamped into Cargo.toml first, then publishes jlua-<arch>.exe (plus a
+# .sha256 sidecar each) as a GitHub Release. A tag containing "-" (v0.2.0-rc.1)
+# ships as a prerelease, which releases/latest/download/... skips.
+name: Release
+
+on:
+  push:
+    tags: [ "v*" ]
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    uses: ./.github/workflows/_build.yml
+    with:
+      # Enables version stamping and the SHA256 sidecars.
+      version: ${{ github.ref_name }}
+      release: true
+      # Only has to outlive the `publish` job below; the binaries are then
+      # attached to the GitHub Release permanently.
+      retention-days: 1
+
+  publish:
+    needs: build
+    runs-on:
+      - self-hosted
+      - Windows
+      - X64
+    steps:
+    - name: Download build artifacts
+      uses: actions/download-artifact@v4
+      with:
+        pattern: jlua-*
+        path: artifacts
+        merge-multiple: true
+
+    - name: Create GitHub release
+      uses: softprops/action-gh-release@v2
+      with:
+        files: artifacts/*
+        prerelease: ${{ contains(github.ref_name, '-') }}
+        generate_release_notes: true
+        fail_on_unmatched_files: true

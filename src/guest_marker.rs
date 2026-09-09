@@ -3,7 +3,7 @@
 //! BEFORE booting a VM (RETRO B3/F12).
 //!
 //! The guest side of a sandbox session is whatever exe the caller stages —
-//! `joybug-core.exe`, `jlua.exe`, the Joybug app — launched with `--listen`
+//! `jlua.exe` or the Joybug app — launched with `--listen`
 //! (debug server) or `--out` (ETW collector). Two things used to go wrong
 //! silently: staging a binary that has no collector role at all produced an
 //! empty capture and a clean exit, and staging one built from another revision

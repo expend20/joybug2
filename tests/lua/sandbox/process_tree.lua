@@ -8,9 +8,9 @@
 -- inside a `wsb exec` job object that dies with it, would kill the survivors
 -- outright. This test is what pins that behaviour down.
 --
--- Requires: the `sandbox` feature and Windows 11 24H2 + the "Windows Sandbox"
--- optional feature. The guest binary is joybug-core.exe (path injected as
--- GUEST_EXE_PATH). Gated on JOYBUG_SANDBOX_LIVE at the Rust layer so a plain
+-- Requires: Windows 11 24H2 + the "Windows Sandbox" optional feature. The guest
+-- binary is jlua.exe (path injected as GUEST_EXE_PATH). Gated on
+-- JOYBUG_SANDBOX_LIVE at the Rust layer so a plain
 -- `cargo test` never boots a VM; here we also self-skip when the sandbox isn't
 -- actually available, so the script is safe to run anywhere.
 
